@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE weblogic-connection-factory-dd PUBLIC 
+  '-//BEA Systems, Inc.//DTD WebLogic 6.0.0 Connector//EN' 
+  'http://www.bea.com/servers/wls600/dtd/weblogic600-ra.dtd'>
+
+<weblogic-connection-factory-dd>
+  <connection-factory-name>tangosol.coherenceTx</connection-factory-name>
+  <description>Resource adapter for Tangosol Coherence(tm) clustered cache</description>
+  <jndi-name>tangosol.coherenceTx</jndi-name>
+  <pool-params>
+    <initial-capacity>0</initial-capacity>
+    <max-capacity>8</max-capacity>
+    <capacity-increment>1</capacity-increment>
+    <shrinking-enabled>false</shrinking-enabled>
+  </pool-params>
+  <log-filename>./coherence-ra.log</log-filename>
+  <logging-enabled>false</logging-enabled>
+</weblogic-connection-factory-dd>
