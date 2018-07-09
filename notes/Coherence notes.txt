@@ -1,0 +1,1133 @@
+cache customer-cache
+cache accounts-cache
+cache transactions-cache
+
+
+drop table cache_table;
+
+CREATE TABLE cache_table
+  ( 
+    cachename varchar2(128),
+    KEY      varchar2(4000),
+    VALUE     blob
+  );
+
+truncate table cache_table;
+
+select * from cache_table order by cachename;
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+System properties
+	System properties are specified on the Java command line using the Java -D option
+	
+	Values specified using system properties override values specified in xml
+	
+	Associating system properties with configuration elements -
+	
+		This can be done for any operational or cache configuration element
+		
+		In order to associate, add "system-property" attribute to the element
+			
+			e.g. -
+			
+			<coherence ... >
+			   <cluster-config>
+					<member-identity>
+						<cluster-name system-property="myapp.cluster.name"></cluster-name>
+					</member-identity>
+				</cluster-config>
+			</coherence>		
+		
+		If a system property is used at run time and it does not exist, it is disregarded
+	
+		Preconfigured properties
+
+			tangosol-coherence.xml and coherence-cache-config.xml already associate system properties with elements
+			
+			Full list is availabl here -
+				D.3 Preconfigured Override Values
+				https://docs.oracle.com/middleware/12212/coherence/develop-applications/system-property-overrides.htm#COHDG4635
+
+			Names of the preconfigured system properties can be changed using override files
+			
+			When using xml override files the preconfigured system properties must always be included along with the element that is to be overridden; otherwise, the property is no longer available
+			
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------			
+
+Operational configuration (operational deployment descriptor)
+
+	Coherence uses first instance of tangosol-coherence.xml found in classpath
+	
+	Overriding 
+		default
+			from classpath: tangosol-coherence-override.xml
+		
+		Env wise
+			from classpath: tangosol-coherence-override-dev.xml
+		
+		coherence.override system property
+		
+		Separate xml files for overriding specific operational elements
+			The override files follow the same structure as the operational deployment descriptor except that their root element must match the element that is to be overridden
+			
+			Provides fine-grained control over which portions of the operational deployment descriptor may be modified
+			
+			Add xml-override attribute to an element that is to be overridden. Value of the attribute is the name of override file.
+
+			e.g. -
+			
+				<configurable-cache-factory-config xml-override="cache-factory-config.xml">
+					<class-name system-property="coherence.cachefactory">com.tangosol.net.ExtensibleConfigurableCacheFactory</class-name>
+					
+					<init-params>
+					.
+					.
+					.
+					</init-params>
+				</configurable-cache-factory-config>
+				
+			It does not throw exception if xml-override is added but actual xml file is not present at run time
+			
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+			
+Cache config (cache configuration deployment descriptor)
+
+	Name and location of the file is specified in <configurable-cache-factory-config> tag in the operational deployment descriptor
+	Note that this tag defines system property coherence.cacheconfig
+	
+	"configurable-cache-factory-config" tag from default operational deployment descriptor
+
+			<configurable-cache-factory-config xml-override="cache-factory-config.xml">
+				<class-name system-property="coherence.cachefactory">com.tangosol.net.ExtensibleConfigurableCacheFactory</class-name>
+
+				<init-params>
+				  <init-param>
+					<param-type>java.lang.String</param-type>
+					<param-value system-property="coherence.cacheconfig">coherence-cache-config.xml</param-value>
+				  </init-param>
+				</init-params>
+			</configurable-cache-factory-config>
+
+	Applications get instance of a cache using it's name, so from the code's pov how caching internally works doesn't matter
+	
+	Cache mappings 
+	
+		map a cache name to a cache scheme definition
+		
+		set initialization parameters that are applied to the underlying cache scheme definition
+		
+		defined using a <cache-mapping> element within the <cache-scheme-mapping> node
+		
+		Exact mapping
+			e.g.
+			
+			   <caching-scheme-mapping>
+				  <cache-mapping>
+					 <cache-name>example</cache-name>
+					 <scheme-name>distributed</scheme-name>
+				  </cache-mapping>
+			   </caching-scheme-mapping>
+
+			   <caching-schemes>
+				  <distributed-scheme>
+					 <scheme-name>distributed</scheme-name>
+				  </distributed-scheme>
+			   </caching-schemes>		
+		 
+		Pattern based mapping
+			* is used as wild cards
+			
+			e.g.
+			
+			   <caching-scheme-mapping>
+				  <cache-mapping>
+					 <cache-name>*</cache-name>
+					 <scheme-name>distributed</scheme-name>
+				  </cache-mapping>
+				  <cache-mapping>
+					 <cache-name>account-*</cache-name>
+					 <scheme-name>account-distributed</scheme-name>
+				  </cache-mapping>
+			   </caching-scheme-mapping>
+
+			   <caching-schemes>
+				  <distributed-scheme>
+					 <scheme-name>distributed</scheme-name>
+				  </distributed-scheme>
+				  <distributed-scheme>
+					 <scheme-name>account-distributed</scheme-name>
+				  </distributed-scheme>
+			   </caching-schemes>			
+		 
+		If cache name matches for multiple mappings, precedence order
+			exact matching (highest precedence)
+			pattern based mappings in the order they are defined in the file
+			
+	Cache schemes
+		
+		define the type of cache (e.g. replicated, distributed etc) and its configuration properties (e.g. partition count, autostart etc.)
+		
+		specified in <caching-schemes> element
+		
+		Each cache type (distributed, replicated, and so on) has a corresponding scheme element and properties
+		
+		schemes can be nested to allow further customized and composite caches such as near caches
+		
+		Aditya:
+			Cache scheme's base element (e.g. <distributed-scheme>, <invocation-scheme>) defines which TYPE of service to use from the ones defined 
+			in operational deployment configuration.
+			
+			Service definitions in opertional config specify defaullt values which can be overriden for each service instance defined in cache config file
+			
+			How about adding cutom servie tags in operational config?
+			
+		Defining distributed scheme
+		
+				Each storage-enabled cluster member that is running the distributed cache service manages a balanced number of partitions.
+		
+				utilizes a distributed (partitioned) cache service instance
+				
+				Any number of distributed caches can be defined in a cache configuration file (of course with distinct names)
+				
+				e.g.
+				
+				   <caching-schemes>
+					  <distributed-scheme>
+						 <scheme-name>distributed</scheme-name>
+						 <backing-map-scheme>
+							<local-scheme/>
+						 </backing-map-scheme>
+						 <autostart>true</autostart>
+					  </distributed-scheme>
+				   </caching-schemes>
+	   
+				read element reference, it is great - 
+					https://docs.oracle.com/middleware/12212/coherence/develop-applications/cache-configuration-elements.htm#COHDG345
+				
+		Defining Local Cache Schemes
+		
+				Local cache is completely contained within a particular cluster node
+				it is not a clustered service
+				
+				caching is in-memory
+				
+				Element <local-scheme> is used to define local caches
+
+				Local caches are generally nested within other cache schemes, for instance as the front-tier of a near cache
+				
+				This element can appear as a sub-element of any of the following elements
+						<caching-schemes>, 
+						<distributed-scheme>, 
+						<replicated-scheme>, 
+						<optimistic-scheme>, 
+						<near-scheme>, 
+						<overflow-scheme>, 
+						<read-write-backing-map-scheme>, 
+						<backing-map-scheme>
+						
+				e.g.
+					  <caching-schemes>
+						<local-scheme>
+						  <scheme-name>local</scheme-name>
+						  <eviction-policy>LRU</eviction-policy>
+						  <high-units>32000</high-units>
+						  <low-units>10</low-units>
+						  <unit-calculator>FIXED</unit-calculator>
+						  <expiry-delay>10ms</expiry-delay>
+						</local-scheme>
+					  </caching-schemes						
+		
+				element reference
+					https://docs.oracle.com/middleware/12212/coherence/develop-applications/cache-configuration-elements.htm#COHDG357
+		
+		Inheritance
+			
+			Element <scheme-ref> specifies name of the cache scheme from which to inherit
+			
+			e.g.
+				<distributed-scheme>
+				  <scheme-name>DistributedInMemoryCache</scheme-name>
+				  <service-name>DistributedCache</service-name>
+				  <backing-map-scheme>
+					<local-scheme>
+					  <scheme-ref>LocalSizeLimited</scheme-ref>
+					</local-scheme>
+				  </backing-map-scheme>
+				</distributed-scheme>
+
+				<local-scheme>
+				  <scheme-name>LocalSizeLimited</scheme-name>
+				  <eviction-policy>LRU</eviction-policy>
+				  <high-units>1000</high-units>
+				  <expiry-delay>1h</expiry-delay>
+				</local-scheme>			
+
+					
+		Macros
+			allow property values in a SCHEME to be replaced AT RUNTIME by values that are configured within CACHE MAPPING INITIALIZATION PARAMS
+			
+			Custom macros
+			
+					Defining macros
+						
+						place a literal string within curly braces as the value of a property
+						
+						default value can be given by placing the value after the string preceded by a space
+						
+						format - {user-defined-name default_value}
+						
+						e.g.
+							<caching-schemes>
+							   <distributed-scheme>
+								  <scheme-name>distributed</scheme-name>
+								  <backing-map-scheme>
+									 <local-scheme>
+
+										<high-units>{back-size-limit 500}</high-units>
+									 
+									 </local-scheme>
+								  </backing-map-scheme>
+								  <autostart>true</autostart>
+							   </distributed-scheme>
+							</caching-schemes>				
+					
+						how to define data type of the macro??
+						
+					Consuming macros
+						e.g.
+							<caching-scheme-mapping>
+							   <cache-mapping>
+								  <cache-name>example</cache-name>
+								  <scheme-name>distributed</scheme-name>
+
+								  <init-params>
+									 <init-param>
+										<param-name>back-size-limit</param-name>
+										<param-value>1000</param-value>
+									 </init-param>
+								  </init-params>
+
+								  </cache-mapping>
+							<caching-scheme-mapping>				
+							
+					
+			Predefined macros
+					Coherence includes predefined parameter macros that minimize custom coding and enable the specification of commonly used attributes 
+					when configuring class CONSTRUCTOR PARAMETERS.
+					
+					<incomplete>
+					
+					
+			System property macros
+					
+					System property macros are literal strings that allow a portion of a value to be replaced with the value of a system property
+										
+					format - ${system.property default_value}
+					
+					e.g.
+						xml -					
+							<caching-scheme-mapping>
+							   <cache-mapping>
+								  <cache-name>*</cache-name>
+								  
+								  <scheme-name>${coherence.profile near}-${coherence.client direct}</scheme-name>
+							   
+							   </cache-mapping>
+							</caching-scheme-mapping>
+
+						command line -
+							-Dcoherence.profile=thin
+							-Dcoherence.client=remote
+					
+					
+			Parameter macros should not be used for service-scoped (shared by all caches in the same service) items, such as thread count, partition count, and service name. Parameter macros should only be used for cache-scoped items, such as expiry, high units, or cache stores to name a few.
+			
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+POF config
+	Xml file to be used is specified by "coherence.pof.config" property (default value of the property is "pof-config.xml")
+
+	pof configuration for Coherence's own classes is in coherence-pof-config.xml, hence it should always be included in pof config file
+	
+	coherence.jar contains default pof configuration implementation in pof-config.xml (which internally just includes coherence-pof-config.xml)
+	
+	importing one config file into another -
+
+		<pof-config ...>        
+		
+		  <user-type-list>
+			<include>coherence-pof-config.xml</include>    
+		  </user-type-list>
+		  
+		</pof-config>	
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Clusters
+	Concepts
+		Cluster
+			Coherence cluster is a network of JVM processes that run Coherence
+			
+			JVMs processes join to the cluster automatically
+			
+			Processes in the cluster are called members or nodes
+			
+			Cluster members communicate using the Tangosol Cluster Management Protocol (TCMP)
+		
+		Senior member
+			Oldest member in the cluster
+			
+			Typically starts core services that are required to create the cluster (??? what does this mean)
+			If the senior member of the cluster is shutdown, another cluster member assumes the senior member role
+		
+		Cache server
+			Cluster member responsible for storing cached data, in other words, these are storage enabled nodes
+			
+			Cluster can have multiple cache servers
+			
+			One JVM can have at the most one cache server
+			
+			Aditya: Entry process, aggregators, queries etc. will execute only on such nodes
+		
+		Clients
+			Cluster members that join the cluster to interact with the cluster's services but do not store cached data.
+			
+			Cached data storage is disabled by using system property coherence.distributed.localstorage=false
+			
+			E.g. 
+				an application that gets and puts data in a cache 
+				
+				a data grid compute application that processes data that is in a cache
+			
+	Services
+		A service is basically a thread created by Coherence inside the JVM process (it might have additional resources e.g. threadpools, queues etc)
+		[Look at threads created in STS]
+		Think about the service as normal Java code thread started by a Coherence API method called from the main method.
+		That API method will read the configuration files (starting point is the operational deployment descriptor) and create a network of Coherence objects and then start the thread.
+		E.g. "backing-map-scheme" element in the xml will tell which implementation of the Map to use.
+		
+		Cluster member always contains a single root cluster service and can optionally contain any number of grid services
+		
+		A grid service has a name (which should uniquely identify it in the cluster) and (predefined) type (which defines what the service is for)
+		
+		Multiple instances of the same type of grid service (obviously with different names) can be running on a cluster member
+		
+		Nodes register and provide and/or consume services
+
+		Types of services
+			Connectivity
+				
+				Cluster service 
+					the root service
+					
+					each member has exactly one
+					
+					it is automatically started when a cluster node must join the cluster
+					
+					detects other cluster nodes, their failures, registers availability of grid services to the cluser
+
+				Proxy service
+				
+			Data
+				Distributed cache service
+				
+				Replicated cache service
+				
+				Optimistic cache service
+				
+			Processing
+				Invocation service
+
+	Servide guardian
+		
+		mechanism that detects and attempts to resolve deadlocks in Coherence threads
+		
+		Deadlocked threads on a member may result in many undesirable behaviors that are visible to the rest of the cluster, such as the inability to add new nodes to the cluster and the inability to service requests by nodes currently in the cluster.
+		
+		service guardian receives periodic heartbeats issued by Coherence-owned and created threads. 
+		Should a thread fail to issue a heartbeat before the configured timeout, the service guardian takes corrective action
+		
+		term deadlock does not necessarily indicate a true deadlock
+		service guardian does not have the ability to distinguish a deadlocked thread from a slow one
+
+		Implementations of the following interfaces are executed by Coherence-owned threads
+		
+			com.tangosol.net.Invocable
+			com.tangosol.net.cache.CacheStore
+			com.tangosol.util.Filter
+			com.tangosol.util.InvocableMap.EntryAggregator
+			com.tangosol.util.InvocableMap.EntryProcessor
+			com.tangosol.util.MapListener
+			com.tangosol.util.MapTrigger
+
+			etc
+
+		<incomplete>
+				
+	Cluster Setup
+		TODO
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+API
+	DefaultCacheServer
+	
+		Used to start a cache server.
+		Cache server can be started from command line or from code
+		
+		Starting cache server from code
+			Approach 1
+				String[] args = new String[]{"my-cache-config.xml", "5"};
+				DefaultCacheServer.main(args);			
+			
+			Approach 2
+				ExtensibleConfigurableCacheFactory.Dependencies deps = ExtensibleConfigurableCacheFactory.DependenciesHelper.newInstance(System.getProperty("coherence.cacheconfig"));
+				ExtensibleConfigurableCacheFactory factory = new ExtensibleConfigurableCacheFactory(deps);
+				DefaultCacheServer dcs = new DefaultCacheServer(factory);
+				dcs.startAndMonitor(5000);	
+
+			Approach 3
+				Used in the code. This looks the best to me.
+		
+		Stopping members
+			Cluster members are most often shutdown using the kill command when on the UNIX platform and Ctrl+c when on the Windows platform. 
+			
+			These commands initiate the standard JVM shutdown hook which is invoked upon normal JVM termination.
+			
+			Issuing the kill -9 command triggers an abnormal JVM termination and the shutdown hook does not run. 
+			
+			The action a cluster member takes when receiving a shutdown command is configured in the operational override file within the <shutdown-listener> element
+			
+	
+		What is the relation between CacheFactory and ConfigurableCacheFactory?
+			Aditya:
+				There are different ways to start Coherence 
+					using CacheFactory.ensureCluster
+					using CacheFactory.getCache
+					DefaultCacheServer.start
+					etc.
+					
+					[Look at threads created in STS]
+				
+				"Starting of coherence" may mean	
+					starting only cluster service and joining the cluster (CacheFactory.ensureCluster)
+					starting only the required cache service (CacheFactory.getCache)
+					starting all the services including all the cache services, invocation services etc which are marked as autostart (DefaultCacheServer.start)
+					etc.
+			
+				Each way will start required threads and configure CacheFactory appropriately so that methods such as "getCache" work correctly as per configuration given
+				It looks like CacheFactory internally has a reference to ConfigurableCacheFactory and delegates operations to it.
+				
+				Depending on the way used, cache configuration can be specified only through global system property (which internally uses ExtensibleConfigurableCacheFactory) 
+				or 
+				it could be supplied using ConfigurableCacheFactory
+			
+		Cluster, Service and Member
+			Application receive event notifications when members join and leave the cluster. 
+			Coherence also tracks all the services that each member is providing and consuming.
+
+			1. getting service object
+				CacheService service = cache.getCacheService();
+				
+				Service service = cluster.getService(sName);
+			
+			1. getting Cluster object
+			
+				Cluster      cluster = service.getCluster();
+			
+			2. Getting list of services running in the cluster
+			
+				for (Enumeration enum = cluster.getServiceNames(); enum.hasMoreElements(); )
+					{
+					String sName = (String) enum.nextElement();
+					ServiceInfo info = cluster.getServiceInfo(sName);
+					// ...
+					}			
+			
+			3. getting Member
+				
+				Member memberThis = cluster.getLocalMember();
+				
+				Set setMembers = cluster.getMemberSet();
+				
+		
+			3. Member event listner
+				Create a class that implements the MemberListener interface to listen for cluster and service membership changes
+				
+				listener class is added on a service by either using the service's addMemberListener method or by adding a <member-listener> 
+				
+				addMemberListener can be called only on a service that is running. So the first MEMBER_JOINED event is missed. 
+				
+				<member-listener> element can be used within the <distributed-scheme>, <replicated-scheme>, <optimistic-scheme>, <invocation-scheme>, and <proxy-scheme>
+				
+				e.g.
+					service.addMemberListener(package.MyMemberListener);
+					
+					<distributed-scheme>
+					   <scheme-name>example-distributed</scheme-name>
+					   <service-name>DistributedCache</service-name>
+					   
+					   <member-listener>
+						  <class-name>deo.coherence.MemberEventListener</class-name>
+					   </member-listener>
+					   
+					   <backing-map-scheme>
+						  <local-scheme>
+							 <scheme-ref>example-binary-backing-map</scheme-ref>
+						  </local-scheme>
+					   </backing-map-scheme>
+					   <autostart>true</autostart>
+					</distributed-scheme>	
+	
+	NamedCache
+		extends
+			java.util.Map<K, V>
+			com.tangosol.net.cache.CacheMap<K, V> 
+				supports adding an expiry value when putting an entry in a cache.
+			com.tangosol.util.QueryMap<K, V>
+			com.tangosol.util.InvocableMap<K, V>
+			com.tangosol.util.ObservableMap<K, V>
+			com.tangosol.util.ConcurrentMap<K, V>
+
+		Obtaining NamedCache instance
+			Session API or CacheFactory API can be used to get referenct to NamedCache instance
+		
+			Both the Session API and CacheFactory API start the underlying cache service if necessary
+		
+		Type safety
+			NamedCache instance can store keys and values of any type
+			Applications must ensure type safety when interacting with cache entries
+			Applications can create NamedCache instances for specific types and Coherence also offers API-level type checking
+		
+		Requirements for cached objects
+			Cache keys and values must be serializable
+			
+			hashCode() and equals() methods
+				Cache keys must provide an implementation of the hashCode() and equals() methods
+				hashCode() and equals() must return consistent results across cluster nodes
+				This implies that the implementation of hashCode() and equals() must be based solely on the object's serializable state 
+			
+			Some cache implementations (specifically the partitioned cache) use the serialized form of the key objects for equality testing
+			So keys for which equals() returns true must serialize identically
+		
+		 Methods inside NamedCache might internally be using entry processors
+	
+	
+	Read entire page:
+		performing-basic-cache-operations
+		https://docs.oracle.com/middleware/12212/coherence/develop-applications/performing-basic-cache-operations.htm#COHDG5985
+		
+		
+		
+	Normal maps return reference to the value on calling get method
+	So the caller can directly change the value in the map
+	This is not true in case of coherence - Value changes only on the local copy, not in the actual backing map
+	
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Storage and backing maps
+
+	Layers
+		Client view
+			API exposed to clients e.g. NamedCache.get/put
+			
+			In the context of diagram on P78 in the book, this is the boundary of the cloud
+			
+		Storage manager
+			Aditya: This layer is the CACHE SERVICE
+			
+			Handles cache related requests from client view
+			
+			In case of putting data into a cache it collects the data from client view and passes to backing map on appropriate node
+			In case of getting data from a cache ...
+			Data flow between storage manager and the backing map is in serialized (binary) format
+			
+			Manages the backing maps (and also the backup maps) -locks, event listeners, triggers etc.
+			
+			In the context of diagram on P78 in the book, this is the cloud (but not the actual data storage)
+			
+			This layer itself is distributed across nodes
+			
+		Backing map
+			[Also called local storage]
+			
+			It is an object implementing java.util.Map interface that Coherence uses to actually store cached data a node
+			
+			Gets a reference of BackingMapManagerContext from storage manager to convert to-and-fro between Coherence specific binary format and the actual Object format
+			
+			Coherence supplies below backing map implementations -
+				com.tangosol.util.SafeHashMap
+				com.tangosol.net.cache.LocalCache
+				com.tangosol.net.cache.ReadWriteBackingMap
+				com.tangosol.net.cache.SerializationMap
+				com.tangosol.io.journal.JournalBinaryStore
+				com.tangosol.net.cache.OverflowMap
+				
+				Are these interfaces ever used directly??
+				
+				https://docs.oracle.com/middleware/12212/coherence/develop-applications/implementing-storage-and-backing-maps.htm#COHDG1377
+			
+			Operations (IMP)
+				Following are examples of operations Coherence performs on backing maps in different scenarios -
+				
+				NamedCache.get() call 			- causes a Map.get() call on a corresponding Backing Map
+				NamedCache.invoke() call 		- may cause a sequence of Map.get() followed by the Map.put()
+				NamedCache.keySet(filter) call 	- may cause an Map.entrySet().iterator() loop
+				
+				Coherence may call Map.remove() in case of time-based expiry or the size-based eviction policy.
+				Aditya: The policy would be defined on the cache, not the map?
+				
+				CacheStore.load() causing Map.put()
+				
+				Partition distributions causing Map.remove() on some nodes and Map.put() on others
+			
+			Gap: How to specify which type of backing map to use in config?
+				 Don't know how Coherence selects the class to use. 
+				 Some information is scattered accross the documentation but there is no clear table.
+					
+			Capacity Planning
+				TO ADD
+				
+			Using Partitioned Backing Maps
+				TO ADD
+			
+			Using Asynchronous Backup
+				With asynchronous backup, clients continue to respond to requests during backup operations
+				
+				typically used to increase client performance
+				
+				
+				<distributed-scheme>
+				   ...        
+				   <async-backup>true</async-backup>
+				   ...
+				</distributed-scheme>
+				
+			Using Delta Backup
+			
+			Entries in a backing map are stored in serialized (binary) format 
+			Applications directly manipulating backing maps need to handle the serialized form of an entry
+		
+		So cache configuration basically says - I want this cache service to create this type of e.g. distributed cache.
+			For local storage I want the service to use a Map instance of XYZ type.
+			The service will manage the maps.
+			Services with the same name running on different nodes will act as one distributed service.
+		
+		Have a look at Figure 13-1 Backing Map Storage at https://docs.oracle.com/middleware/12212/coherence/develop-applications/implementing-storage-and-backing-maps.htm#COHDG5176
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+POF
+	Whenever there is a need to serialize an object, Coherence will check if POF is enabled/provided
+	If it is not, then Java serialization will be used
+	Where is the code that performs default Java serialization?
+	Coherence gave exception when the object I was trying to put into cache was neither Serializable and POF was not configured
+	
+	[read the book too]
+	
+	POF requires serialization code from the programmer that knows how to serialize/deserialize the object
+	
+	There are 3 ways -
+		1. Either the object to be serialized should implement com.tangosol.io.pof.PortableObject interface
+		2. There should be a separate class implementing com.tangosol.io.pof.PofSerializer interface to serialize/deserialize the object 
+		3. Annotations are available that automatically perform de/serialization without requiring an implementation of either of the interfaces
+	
+		1. PortableObject Interface
+			interface
+				public void readExternal(PofReader reader)
+				public void writeExternal(PofWriter writer)
+			
+			e.g.
+				public void readExternal(PofReader in) 
+				   throws IOException 
+				   {
+				   m_symbol    = (Symbol) in.readObject(0);   //NOTE that index is specified as argument	
+				   m_ldtPlaced = in.readLong(1);
+				   m_fClosed   = in.readBoolean(2);
+				   }
+				 
+				public void writeExternal(PofWriter out) 
+				   throws IOException 
+				   {
+				   out.writeObject(0, m_symbol);
+				   out.writeLong(1, m_ldtPlaced);
+				   out.writeBoolean(2, m_fClosed);
+				   }		
+			
+		2. PofSerializer Interface
+			interface
+				public Object deserialize(PofReader in)
+				public void serialize(PofWriter out, Object o)	
+			
+			e.g.	
+				public Object deserialize(PofReader in) 
+				   throws IOException 
+				   {
+				   Symbol symbol    = (Symbol)in.readObject(0);		//NOTE that index is specified as argument
+				   long   ldtPlaced = in.readLong(1);
+				   bool   fClosed   = in.readBoolean(2);
+				   
+				   // mark that reading the object is done
+				   in.readRemainder();
+				 
+				   return new Trade(symbol, ldtPlaced, fClosed);
+				   }
+				 
+				public void serialize(PofWriter out, Object o) 
+				   throws IOException 
+				   {
+				   Trade trade = (Trade) o;
+				   out.writeObject(0, trade.getSymbol());
+				   out.writeLong(1, trade.getTimePlaced());
+				   out.writeBoolean(2, trade.isClosed());
+					
+				   // mark that writing the object is done
+				   out.writeRemainder(null);
+				}		
+		   
+		3. Annotations
+			POF annotations are serialized and deserialized using the PofAnnotationSerializer class which implements PofSerializer interface
+			
+			@Portable
+				Marks the class as POF serializable
+			
+			@PortableProperty
+				Marks a member variable or method accessor as a POF serialized attribute
+				Annotated methods must conform to accessor notation (get, set, is)
+				
+				POF indexes can be specified
+				Index values may be omitted and automatically assigned
+				
+				Custom codecs that are executed before or after serialization or deserialization can be specified
+				If a custom codec is not entered, the default codec is used
+			
+			e.g.
+				@Portable
+				public class Person
+				   {
+				   @PortableProperty(0)
+				   public String getFirstName()
+					  {
+					  return m_firstName;
+					  }
+				 
+				   private String m_firstName;
+
+				   @PortableProperty(1)
+				   private String m_lastName;
+
+				   @PortableProperty(2)
+				   private int m_age;
+				}			
+			
+			POF Configuration Generator 
+				A command line tool that can be used to automatically create POF configuration file that includes user type 
+				entries for classes that have @Portable annotation.
+			
+			Enabling Automatic Indexing
+				TODO
+			
+			Providing a Custom Codec
+				@PortableProperty(codec = LinkedListCodec.class)
+				
+				TODO
+			
+			Does PofAnnotationSerializer support Evolvables?
+			
+	Registering POF mapping
+	
+		Class com.tangosol.io.pof.ConfigurablePofContext maps POF objects with their serialization code (either PortableObject or PofSerializer)
+		
+		The mapping is registered with ConfigurablePofContext using pof configuration xml file
+		
+		Config file details
+			Element <user-type-list> contains a list of classes that implement PortableObject or have a PofSerializer associated with them
+			
+			Element <type-id> for each class must be unique, and must match across all cluster instances 
+			
+			e.g.
+				<pof-config ...>
+				   <user-type-list>
+					  <include>coherence-pof-config.xml</include>
+
+					  <user-type>
+						 <type-id>1001</type-id>
+						 <class-name>com.examples.MyTrade</class-name>
+						 <serializer>														//NOTE: explicit serializer mentioned. It must implement PofSerializer
+							<class-name>com.examples.MyTradeSerializer</class-name>
+						 </serializer>
+					  </user-type>
+				 
+					  <user-type>															//NOTE: no explicit serializer mentioned
+						<type-id>1002</type-id>
+						<class-name>com.examples.MyPortableTrade</class-name>
+					  </user-type>
+				   </user-type-list>
+				</pof-config>				
+		
+			If serializer element is not mentioned -
+				Either the class should implement PortableObject interface 
+				OR
+				The class should be annotated Portable (in which case PofAnnotationSerializer is used)
+			
+		Configuring Coherence to use ConfigurablePofContext
+			By defaullt Coherence disables POF serialization
+			
+			Individual service 
+				Use <serializer> element
+				
+			All services
+				add a <serializer> element within the <defaults> element in a cache configuration file
+				
+			JVM level
+				coherence.pof.enabled=true
+				coherence.pof.config=CONFIG_FILE_PATH
+			
+
+	General
+		Coherence reserves the first 1000 type-id's for internal use
+		
+		When Subclassing reserve index ranges: index's are cumulative across derived types. 
+		As such, each derived type must be aware of the POF index range reserved by its super class.
+		
+		Do not re-purpose indexes: to support Evolvable, it's imperative that indexes of attributes are not re-purposed across class revisions.
+	
+	Object references
+	
+		POF supports the use of object identities and references for objects that occur more than once in THE SAME POF stream. 
+		Objects are labeled with an identity and subsequent instances of a labeled object within THE SAME POF stream are referenced by its identity.
+		
+		Object references are not supported for Evolvable objects
+		
+		Object references are not supported for keys
+		
+		POF objects that use object identity and references cannot be queried using POF extractors
+		
+		For read operations, if an object appears in the data stream multiple times, then the object must be read where it first appears before it can be read in the subsequent part of the data. Otherwise, an IOException: missing identity: <ID> may be thrown
+	
+	POF Extractors and POF Updaters
+		TODO
+
+	Having problem deserializing non-static inner class
+	
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Queries
+	Queries apply only to currently cached data (and do not use the CacheLoader interface to retrieve additional data that may satisfy the query).
+	
+	ValueExtractor
+		used to extract an attribute from a given object for querying and similarly, indexing
+		
+		it is an interface
+		
+		implementations
+			ReflectionExtractor
+				e.g. 
+					ValueExtractor extractor = new ReflectionExtractor("getName");
+					
+				Any void argument method can be used, including Object methods like toString() (useful for prototype/debugging)
+			
+			IdentityExtractor
+			
+			ChainedExtractor
+				allows chained invocation of zero-argument (accessor) methods
+				
+				ValueExtractor extractor = new ChainedExtractor("getName.length");
+			
+	Filters
+		A filter has a single method which determines whether a given object meets a criterion.
+		
+		e.g.
+			Filter filter = new EqualsFilter(extractor, "Bob Smith");
+			
+			filters also have convenience constructors that accept a method name and internally construct a ReflectionExtractor
+				Filter filter = new EqualsFilter("getName", "Bob Smith");
+
+		LimitFilter 
+			used to limit memory footprint on the client
+			
+			it also supports paging
+			
+			e.g.
+			
+				int pageSize = 25;
+				
+				Filter filter = new GreaterEqualsFilter("getAge", 18);
+				
+				Filter limitFilter = new LimitFilter(filter, pageSize);   	
+				
+				Set entries = cache.entrySet(limitFilter);  					// get entries 1-25
+
+				limitFilter.nextPage();
+				
+				entries = cache.entrySet(limitFilter);							// get entries 26-50
+			
+			Limit filter assumes that there are no concurrent modifications to the data set in question.
+			
+			Limit filters are mainly intended for paged display of data on UI.
+			They have performance impact if used in queries
+
+		PartitionedFilter
+
+		ContainsAllFilter
+		
+		ContainsAnyFilter 
+		
+		ContainsFilter
+		 
+	Querying 
+	
+		Filtering example
+			Filter filter = new GreaterEqualsFilter("getAge", 18);
+
+			for (Iterator iter = cache.entrySet(filter).iterator(); iter.hasNext(); )
+				{
+				Map.Entry entry = (Map.Entry) iter.next();
+				Integer key = (Integer) entry.getKey();
+				Person person = (Person) entry.getValue();
+				System.out.println("key=" + key + " person=" + person);
+				}		
+		
+		Filtering and sorting example
+			for (Iterator iter = cache.entrySet(filter, comparator).iterator(); iter.hasNext(); ) {
+				Map.Entry entry = (Map.Entry)iter.next();
+				.
+				.
+				.
+			}			
+		
+			if comparator is null, keys must be Comparable
+				
+		Querying for large data sets -
+			Result of a query can cause out of memory exception if it is too large
+			
+			pattern to use for large data -
+				NamedCache c = CacheFactory.getCache("test");
+				
+				Set keys = c.keySet(filter);
+				
+				final int BUFFER_SIZE = 100;
+				Set buffer = new HashSet(BUFFER_SIZE);
+				
+				for (Iterator i = keys.iterator(); i.hasNext();) {
+					buffer.add(i.next());
+
+					if (buffer.size() >= BUFFER_SIZE) {
+						Map entries = c.getAll(buffer);					// this is the main part. Note that all the keys are still retrieved at once
+
+						process(entries);
+
+						buffer.clear();
+					}
+				}
+				
+				if (!buffer.isEmpty()) {
+					process(c.getAll(buffer));
+				}
+			
+		
+	Indexeing
+		Indexes correlate within a QueryMap, values (or attributes of those values) and corresponding keys
+		
+		Creating index -
+			addIndex method of the QueryMap class is used to create indexes
+			
+			Signature 
+				addIndex(ValueExtractor extractor, boolean fOrdered, Comparator comparator)
+					
+					fOrdered tells whethere the index structure is sorted
+					Sorted indexes are useful for range queries
+			
+			Any attribute able to be queried may be indexed using this method
+			
+			addIndex method is only intended as a hint to the cache implementation and, as such, it may be ignored by the cache if indexes are not 
+			supported or if the desired index (or a similar index) already exists. 
+			For example in a distributed environment, each server likely suggests the same set of indexes when it starts
+		
+		User defined indexes
+			control which entries are added to the index
+			
+			typically used to reduce the memory and processing overhead required to maintain an index
+			
+			<incomplete>
+			
+		To take advantage of an index, queries must use extractors that are equal ((Object.equals()) to the one used in the index
+		
+		Indexing requires the ability to extract attributes on each Partitioned cache node
+		for dedicated cache server instances, this implies (usually) that application classes must be installed in the cache server's classpath
+	
+		For Partitioned caches, queries are typically performed in parallel across the cluster and use indexes
+		Access to unindexed attributes requires object deserialization
+
+		Indexes may be either traditional field indexes (indexing fields of objects) or functional-based indexes (indexing virtual object attributes) 
+		e.g. if a class has field accessors getFirstName and getLastName, the class may define a function getFullName which concatenates those names
+		and this function may be indexed
+		
+		StorageManagerMBean in Jconsole shows index list
+	
+	"In the case of redistribution, data is not evenly distributed across all storage nodes and results in the wrong result set for any incoming query." ???
+		See example of "Queries can also be executed on a server by server basis:"
+		
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+map-reduce
+
+Map based execution
+
+	Object oResult = map.invoke(key, agent);
+
+	Map mapResults = map.invokeAll(collectionKeys, agent);
+
+	Map mapResults = map.invokeAll(filter, agent);
+
+
+Agents
+	Agents implement the EntryProcessor interface, typically by extending the AbstractProcessor class (which provides default implementation of processAll)
+	
+	EntryProcessor interface
+		
+		Interface InvocableMap.EntryProcessor<K,V,R> extends Serializable
+
+		methods
+		
+			R process(InvocableMap.Entry<K,V> entry)
+				Process a Map.Entry object.
+				
+				InvocableMap.Entry is an extension of the Map.Entry interface that allows an EntryProcessor implementation to obtain the 
+				necessary information about the entry and to make the necessary modifications
+				Is it in serialized or inflated form?
+				
+
+			Map<K,R> processAll(Set<? extends InvocableMap.Entry<K,V>> setEntries)
+				Process a Set of InvocableMap.Entry objects
+				Symantically equivalnet to calling process(entry) on each entry
+	
+				If the processAll call throws an exception, changes are only made to the underlying Map for entries that were removed from the setEntries. 
+				Changes that are made to the remaining entries are not processed.
+		
+	Direct manipulation of backing maps
+		Entries in a backing map are stored in serialized (binary) format 
+		So, applications directly manipulating backing maps need to handle the serialized form of an entry
+	
+		com.tangosol.net.BackingMapContext provides a way to directly access entries in a cache's backing map
+		
+		
+		
+		
+	Coherence supplied entry processrors
+	
+		<there is a long list>
+		
+	When processing multiple keys, a single EntryProcessor object is re-used for all the keys and its state should not be mutated
+	 
+	 
+	 
+	 
+<incomplete>	
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+	
