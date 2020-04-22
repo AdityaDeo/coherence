@@ -1,0 +1,151 @@
+Terminology
+	Span
+		The basic unit of work.
+		Identified by: trace-id and span-id (both 64-bit)
+		Can be started and stopped, once you create a span, you must stop it at some point in the future.
+		Spans keep track of their timing information
+		
+	Trace
+		A set of spans forming a tree-like structure
+		
+	Annotation
+		Used to record the existence of an event in time.
+		With Brave instrumentation, we no longer need to set special events for Zipkin to understand who the client and server are, where the request started, and where it ended.
+		
+General
+	Starting with version 2.0.0, Spring Cloud Sleuth uses Brave as the tracing library.
+	Consequently, Sleuth no longer takes care of storing the context but delegates that work to Brave.
+	
+	
+Brave	(https://github.com/openzipkin/brave/tree/master/brave)
+
+	Library used to capture and report latency information about distributed operations.
+	
+	API
+		Sender
+		Reporter
+		Tracing
+		Tracer
+			Span	currentSpan​()
+		Span
+			ScopedSpan 
+		SpanCustomizer
+			CurrentSpanCustomizer 
+		TraceContext
+			traceId​()
+			parentId​()
+			spanId​()
+			sampled​()
+		SamplerFunction
+		Propagation<K>
+		TraceContext.Extractor<C>
+		TraceContext.Injector<C>
+		FinishedSpanHandler
+		CurrentTraceContext 
+			This makes a given span the current span by placing it in scope (usually but not always a thread local scope).
+			This type is an SPI.
+			Implementors looking to change thread-local storage, or integrate with other contexts such as logging (MDC) can use it.
+			
+	Span
+		Spans returned by a tracer report data to Zipkin when finished (or flushed?), or do nothing if unsampled.
+		Span can be annotated with events of interest [annotate​(long timestamp, String value)] 
+		Tags can be added to spans [tag​(String key, String value)] to be used as lookup keys
+		Span has a context [TraceContext context​()] 
+		
+	RPC tracing
+		RPC tracing is often done automatically by interceptors.
+		Under the scenes, they add tags and events that relate to their role in an RPC operation.
+		There is a separate project for HTTP instrumentation - brave-instrumentation-http
+	
+	Sampling
+		Employed to reduce the data collected and reported out of process. 
+		When a span isn't sampled, it adds no overhead (noop).
+		The decision to report data or not is made at the first operation in a trace, and is propagated downstream.
+		By default, there's a global sampler that applies a single rate to all traced operations.
+		Tracing.Builder.sampler is how you indicate this, and it defaults to trace every request.
+		
+	Propogation
+		It is needed to ensure activity originating from the same root are collected together in the same trace.
+		
+		The most common propagation approach is to copy a trace context from a client request to a server receiving it.
+			Client side
+				// configure a function that injects a trace context into a request
+				injector = tracing.propagation().injector(Request.Builder::addHeader);
+
+				// before a request is sent, add the current span's context to it
+				injector.inject(span.context(), request);
+
+			Server side
+				// configure a function that extracts the trace context from a request
+				extractor = tracing.propagation().extractor(Request::getHeader);
+
+				// when a server receives a request, it joins or starts a new trace
+				span = tracer.nextSpan(extractor.extract(request));		
+		
+		TraceContext.Extractor<C> returns TraceContextOrSamplingFlags.
+			
+		TraceContextOrSamplingFlags extracted by Extractor is usually only used with Tracer.nextSpan(extracted)
+			Unless you are sharing span IDs between a client and a server.
+		
+		Sharing span IDs between client and server
+			Tracer.joinSpan​(TraceContext context) method (called on server side)
+				Join re-using the same trace and span ids extracted from an incoming RPC request.
+				
+			When span ID is shared, data reported includes a flag saying so.
+			
+			Some span reporters do not support sharing span IDs.
+			
+	Handling Finished Spans
+		By default, data recorded before (Span.finish()) are reported to Zipkin
+		Reporting is done via the reporter that was passed to Tracing.Builder.spanReporter.
+		FinishedSpanHandler can return false to drop spans that you don't want to see in Zipkin.
+			Spans dropped should not have children.
+			FinishedSpanHandler returns alwaysSampleLocal() to indicate whether it should see all data, or just all data sent to Zipkin. 
+			You can override this to true to observe all operations.
+			
+	Current Span
+		Represents the in-flight operation.
+		
+		Span and scope -
+			How I interprete it - 
+				Doing an activity in the scope of the span.
+				
+				Two points of view -
+					1. Specify which activities belong to a span.
+					2. Activity might want to know in which span it is running (in order to create a child or for logging etc).
+						Tracer.currentSpanCustomizer()
+						Tracer.currentSpan​()
+					
+				Creating a new Span object does not always make it the current span.
+			
+			Q. 
+				1. When span finishes, will it go out of scope automatically?
+				2. Mapping of actiities to spans at different places in code.
+				   Mapping of threads to spans at different points in time.
+				3. How many scopes can be active at a given point in time? Is there one scope per thread?
+			
+		Which are different scopes?
+					
+		Setting a span in scope via custom executors -
+			TBA
+		
+		Setting a span in scope manually -
+			Tracer.startScopedSpan(name)
+			Tracer.withSpanInScope(span)
+				In edge cases, you may need to clear the current span temporarily - Tracer.withSpanInScope(null)
+			
+			Q. How to respore the previous span after our span is over?
+				Looks like bringing spans in and out of scope is a separate concern. Who manages it?
+			
+		Working with callbacks
+			TBA
+			
+		Working with callbacks that occur on different threads
+			You should not set a span in scope if you cannot close that scope on the same thread.
+		
+zipkin-reporter-java	(https://github.com/openzipkin/zipkin-reporter-java)
+	
+		
+		
+		
+	

@@ -1,0 +1,36 @@
+Spring Webflux Curriculum
+
+Server Sent Events
+	HTTP Long Polling vs Streaming
+		https://www.youtube.com/watch?v=rHOHOt7oz-4
+
+	HTTP Request VS Polling VS Server Sent Events(SSE) - Client Server Communication
+		https://www.youtube.com/watch?v=s_uhZSi7NL8
+
+	The end of polling : why and how to transform a REST API into a Data Streaming API? by Audrey Neveu
+		https://www.youtube.com/watch?v=NDDp7BiSad4
+
+	A Look at Server-Sent Events	
+		https://medium.com/conectric-networks/a-look-at-server-sent-events-54a77f8d6ff7
+
+	HTTP persistent connection
+		https://en.wikipedia.org/wiki/HTTP_persistent_connection	
+
+	Reactor Netty, the default runtime for Spring Boot 2.0 by Violeta Georgieva @ Spring I/O 2018
+		https://www.youtube.com/watch?v=WGRaoGrLlBE
+		
+Reactor Framework
+	Reactor in Action - Simon Baslé, Victor Grazi
+		https://www.youtube.com/watch?v=kwuu1efzkf4
+	
+Webflux
+	Build Reactive RESTFUL APIs using Spring Boot/WebFlux - Dilip Bandla Sundarraj
+		https://www.youtube.com/watch?v=FbM_CfCHugE&list=PLnXn1AViWyL70R5GuXt_nIDZytYBnvBdd&index=4
+
+Un-organized
+	What is Spring Webflux and when to use it?
+		https://www.youtube.com/watch?v=M3jNn3HMeWg
+
+
+
+		

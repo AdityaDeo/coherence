@@ -1,0 +1,390 @@
+Data types
+	String
+		This is the only "primitive" type.
+		
+		Store three types of values:
+			Byte string values
+			Integer values
+			Floating-point values
+		
+		String as number:
+			When setting a STRING value in Redis, if that value could be interpreted as a base-10 integer or a floating-point value, Redis will detect this and allow you to manipulate the value using the various INCR* and DECR* operations.
+			Integers turning into floats as necessary.
+			Integers have ranges that are equivalent to the platform’s long integer range (signed 32-bit integers on 32-bit platforms, and signed 64-bit integers on 64-bit platforms).
+			Floats have ranges and values limited to IEEE 754 floating-point doubles.
+			If you try to increment or decrement a key that doesn’t exist or is an empty string, Redis will operate as though that key’s value were zero.
+			Commands:
+				INCR, DECR, INCRBY, DECRBY. INCRBYFLOAT
+		
+		Strings as sequence of bytes
+			This can be useful if we were to use Redis STRING values to pack structured data in an efficient fashion.
+			Commands:
+				APPEND, GETRANGE, SETRANGE, GETBIT/SETBIT, BITCOUNT, BITOP
+
+		Common Commands
+			GET, SET, DEL
+			
+		 In chapter 9, we’ll talk about using STRINGs to store a type of simple mappings that can greatly reduce memory use in some situations.
+		
+	List
+		ordered sequence of strings
+		doubly linked lists
+		list indexes are zero based
+		commands
+			LPUSH/RPUSH, LPOP/RPOP, BLPOP/ BRPOP
+			LINDEX, LRANGE, LTRIM
+			RPOPLPUSH, BRPOPLPUSH
+			we can also remove items, insert items in the middle, trim the list to be a particular size (discarding items from one or both ends), and more
+		The most common use case for using blocking pop commands as well as the pop/ push combination commands is in the development of messaging and task queues.
+			
+	Set
+		unordered sequence of distinct strings
+		use a hash table to keep all strings unique (though there are no associated values)
+		commands
+			SADD, SREM, SPOP
+			SISMEMBER, SMEMBERS, SCARD, SRANDMEMBER
+			SINTER, SINTERSTORE, SUNION, SUNIONSTORE, SDIFF, SDIFFSTORE , SMOVE
+		
+	Hash
+		mapping of string keys to string values
+		distinct keys, undefined order
+		commands
+			HSET, HMSET, HINCRBY, HINCRBYFLOAT
+			HGET, HMGET, HGETALL, HKEYS, HVALS
+			HDEL, 
+			HLEN
+			HEXISTS
+		When confronted with a large value in a HASH, we can fetch the keys and only fetch values that we’re interested in to reduce the amount of data that’s transferred.
+		
+	Sorted Set (ZSet)
+		Named unique members (strings) ordered by associated score in ascending order
+		individual items can be accssed by -
+			member name
+			sorted score order
+			value of score
+		commands
+			ZADD (Adds member with the given score to the ZSET), ZREM
+			ZRANGE (Fetches the items in the ZSET from their positions in sorted order), ZREVRANGE
+			ZRANGEBYSCORE (Fetches items in the ZSET based on a range of scores), ZREVRANGEBYSCORE
+			ZRANK, ZREVRANK
+			ZSCORE
+			ZINCRBY
+			ZUNIONSTORE
+			ZINTERSTORE	(intersec and combine scores)
+				1. Arguments: output zet key, sets and zsets
+				2. Find entries present in all of the SETs and ZSETs
+				3. Combine their scores in different ways (items in SETs are considered to have scores equal to 1)
+			ZREMRANGEBYRANK, ZREMRANGEBYSCORE
+			ZCARD, ZCOUNT (Returns the number of members with scores between the provided minimum and maximum)
+		
+		If some of the ZREV* commands are confusing, remember that they work the same as their nonreversed counterparts, except that the ZSET behaves as if it were in reverse order.
+		For details on intersection  and union, refer to https://redislabs.com/ebook/part-2-core-concepts/chapter-3-commands-in-redis/3-5-sorted-sets/
+	
+	Redis doesn’t allow nested structures
+	In some cases, Redis can perform operations between SETs and ZSETs (union, intersection).
+	
+Publish/subscribe
+	Commands
+		SUBSCRIBE channel [channel …], UNSUBSCRIBE [channel [channel …]], PSUBSCRIBE pattern [pattern …], PUNSUBSCRIBE [pattern [pattern …]]
+		PUBLISH channel message
+	
+	If PUBLISH and SUBSCRIBE are so useful, why don’t we use them very much? There are two reasons.
+		1.
+		In older versions of Redis, a client that had subscribed to channels but didn’t read sent messages fast enough could cause Redis itself to keep a large outgoing buffer.
+		Modern versions of Redis don’t have this issue, and will disconnect subscribed clients that are unable to keep up with the client-output-buffer-limit pubsub configuration option.
+
+		2. 
+		In the case of clients that have subscribed, if the client is disconnected and a message is sent before it can reconnect, the client will never see the message. 
+		When you’re relying on receiving messages over a channel, the semantics of PUBLISH/SUBSCRIBE in Redis may let you down.
+
+Sorting
+	SORT allows us to sort LISTs, SETs, and ZSETs according to data in the LIST/SET/ZSET, data stored in STRING keys, or even data stored in HASHes.
+	If you’re coming from a relational database background, you can think of SORT as like the order by clause in a SQL statement that can reference other rows and tables.
+	
+	Commands
+		SORT source-key [BY pattern] [LIMIT offset count] [GET pattern [GET pattern …]] [ASC|DESC] [ALPHA] [STORE dest-key]
+			 Sorts the input LIST, SET, or ZSET according to the options provided, and returns or stores the result
+	
+Transactions
+	Commands
+		MULTI, EXEC, WATCH, UNWATCH, DISCARD
+		
+	Transactions in Redis are not the same as a RDBMS transactions, which can be executed partially, and then rolled back or committed. 
+	In Redis, every command passed as part of a basic MULTI/EXEC transaction is executed one after another until they’ve completed. 
+
+	Pipelining
+		Sending multiple commands at once and waiting for all of the replies.
+		It has the can improve Redis’s performance by reducing the number of network round trips.
+	
+	MULTI/EXEC pipeline
+		When Redis receives MULTI, it queues up commands from the same connection until it receives an EXEC.
+		When Redis receives EXEC, it executes the queued commands sequentially without interruption.
+		After they’ve completed, other clients may execute their commands.
+		Many Redis clients store the commands to send until we actually want to send them. This reduces the number of round trips.
+
+	Watch
+		Step 1. WATCH keys
+		Step 2. MULTI/EXEC
+			If any watched key is replaced, updated or deleted by any other client before EXEC, EXEC will fail with an error message.
+	
+	UNWATCH / DISCARD
+		Unwatch: Unwatch all the keys, keep the command queue
+		Discard: Unwatch all the keys, and clear the command queue
+		
+	Example (Market Place)
+		users:<user-id>		- Hash
+		inventory:<user-id>	- Set
+		market				- Zset, <item-name>.<owner-user-id> -> selling price
+	
+	WHY DOESN’T REDIS IMPLEMENT TYPICAL LOCKING
+		Relational databases can place a lock on rows until a transaction is completed with COMMIT or ROLLBACK.
+		Any other client trying to updated the same rows is blocked.
+		This works well in practice but it can result in long wait times if the lock holder is slow.
+		In optimistic locking (used by Redis), clients are never waiting on the first holder of the lock, instead they retry if some other client was faster.
+
+Performance considerations
+	Use multi commands like MGET, MSET, HMGET, HMSET, RPUSH/LPUSH, SADD, ZADD, and others.
+	Redis comes with "redis-benchmark".
+	"redis-benchmark" doesn’t actually process the result of the commands that it performs.
+	It means that result parsing overhead isn't taken into account. 
+	For single client and non-pipelined commands, we can expect the Python Redis client to perform at roughly 50–60% of what redis-benchmark says.
+		
+Expiring entries
+	We can remove the data explicitly with DEL, or if we want to remove an entire key after a specified timeout, we can use expiration.
+	Redis will automatically delete the key when its expiration time has arrived.
+	With containers (LISTs, SETs, HASHes, and ZSETs), we can only expire entire keys, not individual items (this is also why we use ZSETs with timestamps in a few places).
+	
+	Commands:
+		PERSIST key-name
+		TTL key-name, PTTL key-name
+		EXPIRE key-name seconds, PEXPIRE key-name milliseconds
+		EXPIREAT key-name timestamp, PEXPIREAT key-name timestamp-milliseconds
+
+Persistence
+	Why you’d want to store in—memory data on disk 
+		- For persistence
+		- Snapshot/AOFs created on the disk can be backed up on remote locations to protect from system failure
+		- In case of server replication
+
+	Snapshots
+		Create a point-in-time copy of in-memory data on disk.
+		Until the next snapshot is performed, data written to Redis since the last snapshot started (and completed) would be lost if there were a crash caused by Redis, the system, or the hardware
+			Example
+				02:35 pm : Previous snapshot completed
+				03:06 pm : New snapshot starts
+				03:07 pm : 35 entries updated in in-memory cache
+				03:08 pm : New snapshot finishes
+				
+				If Redis crashes after 03:06 pm (i.e. new snapshot started) and before 03:08 pm (i.e. new snapshot finishes), all the updates made after 02:35 pm are lost.
+				If Redis crashes after 03:08 pm (i.e. new snapshot finishes), all the updates made after 03:06 pm are lost.
+			
+		Five methods of initiating a snapshot
+			- Redis client calls BGSAVE command
+				On platforms that support BGSAVE (basically all platforms except for Windows)
+					Redis will fork
+					Child process will write the snapshot to disk
+					Parent process continues to respond to commands.
+			
+			- Redis client calls SAVE command
+				No forking of child process
+				Redis stops responding to all commands until the snapshot completes
+			
+			- Redis is configured with save lines
+				Redis will automatically trigger a BGSAVE.
+				When multiple save lines are present, any time one of the rules match, a BGSAVE is triggered.
+		
+			- When Redis receives SHUTDOWN command or standard TERM signal
+				Redis will perform a SAVE
+				Then shut down
+			
+			- A Redis server issues the SYNC command to another Redis server
+				This is done to begin replication.
+				Master Redis server will start a BGSAVE operation if one isn’t already executing or recently completed.
+
+		Can snapshot start between MULTI-EXEC commands?
+			Ans. No, snapshot cannot start in between MULTI-EXEC commands. 
+				"And because we used MULTI/EXEC pipelinesas introduced in chapter 3, we ensure that the dump will only include processed log information when it also includes progress information."
+				
+		SAVE, BGSAVE and Fork
+			When the amount of data in Redis is under a few gigabytes, Redis will fork, save to disk, and finish the snapshot faster than you can read this sentence.
+			Fork
+				When a process forks, the underlying operating system makes a copy of the process. 
+				On Unix and Unix-like systems, the copying process is optimized such that, initially, all memory is shared between the child and parent processes. 
+				When either the parent or child process writes to memory, that memory will stop being shared.
+				Real hardware, VMWare virtualization or KVM virtualization will generally create a fork of a Redis process at roughly 10–20ms per gigabyte of memory that Redis is using.
+				With Xen virtualization, those numbers can be closer to 200–300ms per gigabyte of memory used by Redis.
+			SAVE
+				There’s no fork delay. 
+				Because Redis doesn’t have to fight with itself for resources, the snapshot will finish faster.
+		
+		Configuration properties
+			save 60 1000
+				(automatic triggering of BGSAVE)
+			stop-writes-on-bgsave-error no
+			rdbcompression yes
+			dbfilename dump.rdb
+				(snapshots are written to the file referenced as dbfilename)
+			Snapshotting
+			persistence options
+			dir ./
+				(where to store the snapshot or append-only file)
+	
+	AOF
+		Append—only file.
+		Copy incoming write commands to disk as they happen.
+		Upon restart, Redis executes every command in the AOF in order. 
+		
+		File syncing
+			File "write" system call
+				On receiving the call, operating system doesn't write to the disk immediately. 
+				OS writes to a buffer and runs it's disk scheduling algorithms.
+			
+			File "flush" system call
+				It makes request to the OS to write already provided data to the disk, when it next has a chance.
+				This is only a request.
+			
+			File "sync" system call
+				It forces the OS to write already provided data on the disk.
+				The call blocks until the device reports that the transfer has completed.
+				When it completes, we can be certain that our data is on disk and we can read it later if the system otherwise fails.
+				
+			Sync options to use with appendfsync
+				always: 	Every write command to Redis results in a write to disk. Slows Redis down substantially as it is limited by disk performance. 
+				everysec:	Explicitly syncs write commands to disk	once per second.
+				no:			Lets the operating system control syncing to disk.
+				
+			Disk write performance stats
+				spinning disk: ~200 writes/second
+				SSD: few tens of thousands writes/second
+					By writing small amounts of data to the end of a file, you can reduce the lifetime of SSDs from years to just a few months in some cases.
+
+		Rewriting/compacting AOFs
+			When handling large AOFs, Redis can take a very long time to start up.
+			Over time, a growing AOF could cause your disk to run out of space.
+			BGREWRITEAOF command
+				Rewrite the AOF to be as short as possible by removing redundant commands.
+				It performs a fork and rewrites the append-only log in the child.
+				After it is rewritten, original AOF should be deleted, which can cause the system to hang for multiple seconds (in case of large files).
+			
+		Configuration properties
+			appendonly no
+			appendfsync everysec
+			no-appendfsync-on-rewrite no
+			auto-aof-rewrite-percentage 100
+				(automatic BGREWRITEAOF execution)
+			auto-aof-rewrite-min-size 64mb
+				(automatic BGREWRITEAOF execution)
+			Append-only file
+			persistence options
+			dir ./
+				(where to store the snapshot or append-only file)
+				
+	Snapshots and AOF can be used together, separately, or not at all in some circumstances.
+	
+	Verifying snapshots and append-only files
+		Redis includes two command-line applications for testing the status of a snapshot and an append-only file
+			redis-check-dump
+			redis-check-aof
+		
+		There’s no currently supported method of repairing a corrupted snapshot.
+			Keeping multiple backups of important snapshots
+			Calculate SHA1 or SHA256 hashes to verify content after transfer.
+
+		Fixing corrupted AOF
+			redis-check-aof can be invoked with "fix" argument
+			It will scan AOF looking for an incomplete or incorrect command
+			Upon finding the first bad command, it trims the file to just before that command would’ve been executed.
+		
+		
+	
+Replication
+	Redis only supports Master-Slave replication (Master-Master replication is not supported).
+	Master handles writes (and reads?).
+	Slaves handle only reads.
+	Slaves receive an initial snapshot a stream of write commands as received on the master.
+	Clients will connect to one of the slaves to read their data (typically choosing them in a random fashion).
+	
+	Example performance stats
+		On a 2.4 GHz Intel Core 2 Duo, Redis will take 7–8 milliseconds to perform a SUNIONSTORE of two 10,000-item SETs that produces a single 20,000 item SET.
+	
+	Configuration / Commands
+		Master side
+			Set the path and filename listed under the "dir" and "dbfilename" configuration properties. 
+		
+		Slave side
+			"slaveof host port" configuration property
+			
+			Stop slaving
+				"SLAVEOF no one" command
+				
+			Slave to a different master.
+				"SLAVEOF host port" command
+	
+	Replication startup process
+		https://redislabs.com/ebook/part-2-core-concepts/chapter-4-keeping-data-safe-and-ensuring-performance/4-2-replication/4-2-2-redis-replication-startup-process/
+		
+		Heavvy network bandwidth is used to transfer snapshots and backlog of commands between master and slaves.
+	
+	Master/slave chains
+		Some developers have found that when they need to replicate to more than a handful of slaves, some networks are unable to keep up
+		Because there’s nothing particularly special about being a master or a slave in Redis, slaves can have their own slaves, resulting in master/slave chaining.
+		
+		<incomplete>
+		
+	How to handle eventual consistency?
+		Verifying that the data we wrote to the master made it to the slave is easy: we merely need to write a unique dummy value after our important data, and then check for it on the slave.
+		
+	Replacing a failed master
+		https://redislabs.com/ebook/part-2-core-concepts/chapter-4-keeping-data-safe-and-ensuring-performance/4-3-handling-system-failures/4-3-2-replacing-a-failed-master/
+	
+	INFO command can be used to verify that data is written to disk on a slave
+		Read https://redislabs.com/ebook/part-2-core-concepts/chapter-4-keeping-data-safe-and-ensuring-performance/4-2-replication/4-2-4-verifying-disk-writes/
+	
+General tips
+	Set entries to expire automatically to save memory
+	
+	1.3
+		Using The Colon Character as a SeparatorThroughout this and other chapters, you’ll find that we use the colon character (:) as a separator between parts of names.
+		The choice of : is subjective, but common among Redis users.
+		Note how we use colons to define nested namespaces throughout the examples in the book.
+
+		How we choose to offer flexibility or limitations in searchability can change how we store and update our data in any database, and Redis is no exception
+		
+	2.1
+		Most relational databases are limited to inserting, updating, or deleting roughly 200–2,000 individual rows every second per database server.
+		
+		As you learn more about Redis, you’ll likely discover that some of the solutions we present aren’t the only ways to solve the problem. 
+		
+	3.2
+		In Redis, when we talk about a group of commands as being atomic, we mean that no other client can read or change data while we’re reading or changing that same data.
+	
+	4.2.4
+		INFO command
+		
+Example applications		
+	Article voting and grouping site (1.3)
+		Entries:
+			<article-id> - Hash of article details
+			score:		 - Zset	of <article-id> -> score based on votes
+			time:		 - Zset of <article-id> -> time at which article was posted
+			vote:<article-id>	- Set of <user-ids>	
+			<group-name>		- Set of <article-ids>
+			score:<group-name>	(temporary)
+
+	Fake Web Retailer (2)
+		Token cookies
+			Cookies are small pieces of data that websites ask our web browsers to store and resend on every request to that service.
+			Token cookies use a series of random bytes as the data in the cookie. 
+			On the server, the token is used as a key to look up the user who owns that token by querying a database of some kind.
+	
+		Entries:
+			Shppoing cart
+				login:	- Hash, token -> user
+				recent:	- Zset,	token -> current time
+				viewed:<token>	- Zset, item -> current time
+				cart:<token>	- Hash, token -> hopping cart
+				
+			Database row caching
+				delay:		- Zset, <row-id> -> delay
+				schedule:	- Zset, <row-id> -> current time
+				inv:<row-id> - Hash
